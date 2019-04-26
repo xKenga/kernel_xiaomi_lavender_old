@@ -38,7 +38,6 @@
 #include <net/cfg80211.h>
 #include <net/ieee80211_radiotap.h>
 #include "sap_api.h"
-#include "sme_power_save_api.h"
 #include "wlan_hdd_wmm.h"
 #include "wlan_hdd_tdls.h"
 #include <wlan_hdd_ipa.h>
@@ -563,6 +562,11 @@ static bool hdd_tx_rx_is_dns_domain_name_match(struct sk_buff *skb,
 	uint8_t *domain_name;
 
 	if (adapter->track_dns_domain_len == 0)
+		return false;
+
+	/* check OOB , is strncmp accessing data more than skb->len */
+	if ((adapter->track_dns_domain_len +
+	    QDF_NBUF_PKT_DNS_NAME_OVER_UDP_OFFSET) > qdf_nbuf_len(skb))
 		return false;
 
 	domain_name = qdf_nbuf_get_dns_domain_name(skb,
@@ -1564,9 +1568,11 @@ static inline void hdd_resolve_rx_ol_mode(hdd_context_t *hdd_ctx)
 {
 	if (!(hdd_ctx->config->lro_enable ^
 	    hdd_ctx->config->gro_enable)) {
-		hdd_ctx->config->lro_enable && hdd_ctx->config->gro_enable ?
-		hdd_err("Can't enable both LRO and GRO, disabling Rx offload") :
-		hdd_debug("LRO and GRO both are disabled");
+		if (hdd_ctx->config->lro_enable && hdd_ctx->config->gro_enable) {
+			hdd_err("Can't enable both LRO and GRO, disabling Rx offload");
+		} else {
+			hdd_debug("LRO and GRO both are disabled");
+		}
 		hdd_ctx->ol_enable = 0;
 	} else if (hdd_ctx->config->lro_enable) {
 		hdd_debug("Rx offload LRO is enabled");
